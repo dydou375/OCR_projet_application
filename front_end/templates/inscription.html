@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Inscription - OCR Project{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <h1 class="text-center mb-4">Inscription</h1>
+            <form id="register-form">
+                <div class="form-group mb-3">
+                    <label for="nom">Nom :</label>
+                    <input type="text" class="form-control" id="nom" name="nom" required>
+                </div>
+
+                <div class="form-group mb-3">
+                    <label for="prenom">Prénom :</label>
+                    <input type="text" class="form-control" id="prenom" name="prenom" required>
+                </div>
+
+                <div class="form-group mb-3">
+                    <label for="date_naissance">Date de naissance :</label>
+                    <input type="date" class="form-control" id="date_naissance" name="date_naissance" required>
+                </div>
+
+                <div class="form-group mb-3">
+                    <label for="email">Adresse email :</label>
+                    <input type="email" class="form-control" id="email" name="email" required>
+                </div>
+
+                <div class="form-group mb-3">
+                    <label for="password">Mot de passe :</label>
+                    <input type="password" class="form-control" id="password" name="password" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">S'inscrire</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Toast pour les messages d'erreur -->
+<div class="toast" id="error-toast" role="alert" aria-live="assertive" aria-atomic="true" style="position: fixed; top: 20px; right: 20px;">
+    <div class="toast-header">
+        <strong class="me-auto">Erreur</strong>
+        <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+    <div class="toast-body" id="error-toast-body">
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/front_end/static/js/inscription.js"></script>
+{% endblock %}

@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}OCR Project - Accueil{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-12 text-center mb-5">
+            <h1>Bienvenue sur OCR Project</h1>
+            <p class="lead">Votre solution intelligente pour la reconnaissance de texte</p>
+            <!-- Message de bienvenue personnalisé -->
+            <div id="welcome-message" class="alert alert-success mt-3" style="display: none;"></div>
+            
+            <!-- Message de débogage (temporaire) -->
+            <div id="debug-message" class="alert alert-warning mt-3" style="display: none;"></div>
+            
+            <!-- Boutons de connexion/inscription (visibles si non connecté) -->
+            <div id="auth-buttons" class="mt-4">
+                <a href="/login" class="btn btn-primary me-2">Connexion</a>
+                <a href="/inscription" class="btn btn-outline-primary">Inscription</a>
+            </div>
+            
+            <!-- Bouton de déconnexion (visible si connecté) -->
+            <div id="logout-button" class="mt-4" style="display: none;">
+                <button id="btn-logout" class="btn btn-danger">Déconnexion</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cartes des fonctionnalités -->
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Scanner de Documents</h5>
+                    <p class="card-text">Numérisez vos documents en quelques clics et convertissez-les en texte modifiable.</p>
+                    <a href="/scanner" class="btn btn-primary">Commencer</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Historique</h5>
+                    <p class="card-text">Consultez et gérez l'historique de vos documents numérisés.</p>
+                    <a href="/historique" class="btn btn-primary">Voir l'historique</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Export Facile</h5>
+                    <p class="card-text">Exportez vos documents numérisés dans différents formats.</p>
+                    <a href="#" class="btn btn-primary">En savoir plus</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Script pour gérer l'authentification -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const authButtons = document.getElementById('auth-buttons');
+    const logoutButton = document.getElementById('logout-button');
+    const welcomeElement = document.getElementById('welcome-message');
+    const debugElement = document.getElementById('debug-message');
+    
+    // Afficher les informations de débogage
+    debugElement.innerHTML = 'Débogage:<br>';
+    debugElement.style.display = 'block';
+    
+    // Vérifier si l'utilisateur est connecté
+    const userData = localStorage.getItem('userData');
+    const accessToken = localStorage.getItem('access_token');
+    
+    debugElement.innerHTML += `userData existe: ${userData ? 'Oui' : 'Non'}<br>`;
+    debugElement.innerHTML += `accessToken existe: ${accessToken ? 'Oui' : 'Non'}<br>`;
+    
+    if (userData && accessToken) {
+        try {
+            const user = JSON.parse(userData);
+            
+            debugElement.innerHTML += `Données utilisateur: ${JSON.stringify(user)}<br>`;
+            debugElement.innerHTML += `welcome_message existe: ${user.welcome_message ? 'Oui' : 'Non'}<br>`;
+            debugElement.innerHTML += `prenom existe: ${user.prenom ? 'Oui' : 'Non'}<br>`;
+            debugElement.innerHTML += `nom existe: ${user.nom ? 'Oui' : 'Non'}<br>`;
+            
+            // Afficher le message de bienvenue
+            if (user.welcome_message) {
+                welcomeElement.textContent = user.welcome_message;
+                welcomeElement.style.display = 'block';
+                debugElement.innerHTML += `Message affiché: ${user.welcome_message}<br>`;
+            } else if (user.prenom && user.nom) {
+                welcomeElement.textContent = `Bienvenue, ${user.prenom} ${user.nom} ! Nous sommes ravis de vous revoir.`;
+                welcomeElement.style.display = 'block';
+                debugElement.innerHTML += `Message affiché: Bienvenue, ${user.prenom} ${user.nom} !<br>`;
+            } else {
+                debugElement.innerHTML += `Aucun message affiché: données insuffisantes<br>`;
+            }
+            
+            // Afficher le bouton de déconnexion et masquer les boutons de connexion/inscription
+            authButtons.style.display = 'none';
+            logoutButton.style.display = 'block';
+        } catch (e) {
+            debugElement.innerHTML += `Erreur lors du parsing JSON: ${e.message}<br>`;
+            console.error('Erreur lors de la lecture des données utilisateur:', e);
+        }
+    } else {
+        // Utilisateur non connecté
+        debugElement.innerHTML += `Utilisateur non connecté<br>`;
+        authButtons.style.display = 'block';
+        logoutButton.style.display = 'none';
+        welcomeElement.style.display = 'none';
+    }
+    
+    // Gérer la déconnexion
+    document.getElementById('btn-logout').addEventListener('click', function() {
+        // Supprimer les données d'authentification
+        localStorage.removeItem('userData');
+        localStorage.removeItem('access_token');
+        
+        // Afficher un message de déconnexion
+        welcomeElement.textContent = 'Vous avez été déconnecté avec succès.';
+        welcomeElement.className = 'alert alert-info mt-3';
+        welcomeElement.style.display = 'block';
+        
+        // Mettre à jour l'affichage des boutons
+        authButtons.style.display = 'block';
+        logoutButton.style.display = 'none';
+        
+        // Rediriger vers la page de connexion après un court délai
+        setTimeout(function() {
+            window.location.href = '/login';
+        }, 2000);
+    });
+    
+    // Bouton pour afficher le contenu du localStorage (pour débogage)
+    const debugButton = document.createElement('button');
+    debugButton.textContent = 'Afficher localStorage';
+    debugButton.className = 'btn btn-warning mt-2';
+    debugButton.onclick = function() {
+        alert('localStorage:\n' + 
+              'userData: ' + localStorage.getItem('userData') + '\n' +
+              'accessToken: ' + localStorage.getItem('access_token'));
+    };
+    debugElement.appendChild(document.createElement('br'));
+    debugElement.appendChild(debugButton);
+});
+</script>
+{% endblock %}

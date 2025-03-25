@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+
+{% block title %}Scanner de Documents{% endblock %}
+
+{% block extra_css %}
+<style>
+    .drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 4px;
+        padding: 20px;
+        text-align: center;
+        background: #f8f9fa;
+        transition: border .3s ease-in-out;
+    }
+    .drop-zone.dragover {
+        border-color: #0d6efd;
+        background: #e9ecef;
+    }
+    .spinner-border {
+        width: 3rem;
+        height: 3rem;
+    }
+    .invoice-data {
+        margin-top: 2rem;
+        padding: 1rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        background-color: #fff;
+    }
+    .item-row {
+        padding: 10px 0;
+    }
+    .form-row {
+        display: flex;
+        flex-wrap: wrap;
+        margin-right: -5px;
+        margin-left: -5px;
+    }
+    .form-row > .form-group {
+        padding-right: 5px;
+        padding-left: 5px;
+    }
+    /* Styles pour la liste des fichiers sélectionnés */
+    .file-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(0,0,0,0.1);
+    }
+    .file-item:last-child {
+        border-bottom: none;
+    }
+    .file-info {
+        display: flex;
+        align-items: center;
+    }
+    .file-icon {
+        margin-right: 10px;
+        color: #dc3545;
+    }
+    .remove-file-btn {
+        color: #dc3545;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 5px 10px;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+    .remove-file-btn:hover {
+        background-color: rgba(220, 53, 69, 0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="text-center">Télécharger votre facture</h3>
+                </div>
+                <div class="card-body">
+                    <div class="drop-zone mb-4" id="dropZone">
+                        <p class="mb-0">Glissez et déposez votre fichier ici</p>
+                        <p>ou</p>
+                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                            Sélectionner un fichier
+                        </button>
+                    </div>
+                    <input type="file" id="fileInput" class="d-none" accept=".pdf,.jpg,.jpeg,.png" multiple>
+                    <div id="fileInfo" class="mt-3"></div>
+                    
+                    <div class="form-group mt-3">
+                        <label for="ocr-service">Service OCR</label>
+                        <select class="form-control" id="ocr-service" name="ocr_service">
+                            <option value="auto" selected>Automatique (recommandé)</option>
+                            <option value="tesseract">Tesseract OCR</option>
+                            <option value="azure">Azure Computer Vision</option>
+                            <option value="google">Google Cloud Vision</option>
+                        </select>
+                    </div>
+                    
+                    <div class="text-center mt-3">
+                        <button id="scanButton" class="btn btn-success" disabled>
+                            Scanner la facture
+                        </button>
+                    </div>
+                    
+                    <div id="loadingSpinner" class="text-center mt-4 d-none">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                        <p class="mt-2">Analyse de la facture en cours...</p>
+                    </div>
+                    
+                    <div id="resultContainer" class="mt-4">
+                        <!-- Les résultats seront affichés ici -->
+                    </div>
+                    
+                    <div id="invoice-data-container" class="mt-4">
+                        <!-- Les données de la facture seront affichées ici -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', path='/js/scanner.js') }}"></script>
+<script>
+    // Code pour ajouter la fonctionnalité de suppression de fichiers
+    document.addEventListener('DOMContentLoaded', function() {
+        // Fonction pour ajouter des boutons de suppression aux fichiers
+        function addRemoveButtons() {
+            const fileInfo = document.getElementById('fileInfo');
+            if (!fileInfo) return;
+            
+            // Vérifier si des fichiers sont affichés
+            const fileList = fileInfo.querySelector('ul');
+            if (!fileList) return;
+            
+            // Ajouter des boutons de suppression à chaque fichier
+            const fileItems = fileList.querySelectorAll('li');
+            fileItems.forEach((item, index) => {
+                // Ne pas ajouter de bouton si le fichier est invalide ou si un bouton existe déjà
+                if (item.classList.contains('text-danger') || item.querySelector('.remove-file-btn')) return;
+                
+                // Créer le bouton de suppression
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-file-btn ms-2';
+                removeBtn.innerHTML = '<i class="fas fa-times"></i> Retirer';
+                removeBtn.dataset.index = index;
+                
+                // Ajouter un écouteur d'événement au bouton
+                removeBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    removeFile(parseInt(this.dataset.index));
+                });
+                
+                // Ajouter le bouton à l'élément de la liste
+                item.appendChild(removeBtn);
+            });
+        }
+        
+        // Fonction pour supprimer un fichier
+        function removeFile(index) {
+            // Vérifier si l'index est valide
+            if (index < 0 || index >= selectedFiles.length) return;
+            
+            // Récupérer le nom du fichier pour le message
+            const fileName = selectedFiles[index].name;
+            
+            // Supprimer le fichier du tableau
+            selectedFiles.splice(index, 1);
+            
+            // Mettre à jour l'affichage
+            updateFileDisplay();
+            
+            // Afficher un message de confirmation
+            showAlert('success', `Le fichier "${fileName}" a été retiré de la liste.`);
+        }
+        
+        // Fonction pour mettre à jour l'affichage des fichiers
+        function updateFileDisplay() {
+            const fileInfo = document.getElementById('fileInfo');
+            const scanButton = document.getElementById('scanButton');
+            
+            if (selectedFiles.length === 0) {
+                fileInfo.innerHTML = '<div class="alert alert-danger">Aucun fichier valide sélectionné. Veuillez sélectionner des images JPG, PNG ou des PDF.</div>';
+                scanButton.disabled = true;
+            } else {
+                let fileListHtml = '<div class="alert alert-info"><strong>Fichiers sélectionnés:</strong><ul>';
+                
+                for (let i = 0; i < selectedFiles.length; i++) {
+                    const file = selectedFiles[i];
+                    fileListHtml += `<li>${file.name} - ${formatFileSize(file.size)}</li>`;
+                }
+                
+                fileListHtml += '</ul></div>';
+                fileInfo.innerHTML = fileListHtml;
+                scanButton.disabled = false;
+                
+                // Mettre à jour le texte du bouton
+                scanButton.textContent = `Scanner ${selectedFiles.length} facture${selectedFiles.length > 1 ? 's' : ''}`;
+                
+                // Ajouter les boutons de suppression
+                setTimeout(addRemoveButtons, 0);
+            }
+        }
+        
+        // Fonction pour afficher une alerte
+        function showAlert(type, message) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+            `;
+            
+            // Insérer l'alerte avant la liste des fichiers
+            const fileInfo = document.getElementById('fileInfo');
+            if (fileInfo) {
+                fileInfo.parentNode.insertBefore(alertDiv, fileInfo);
+            }
+            
+            // Supprimer l'alerte après 5 secondes
+            setTimeout(() => {
+                alertDiv.classList.remove('show');
+                setTimeout(() => alertDiv.remove(), 150);
+            }, 5000);
+        }
+        
+        // Fonction pour formater la taille du fichier
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Observer les changements dans la liste des fichiers
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList' && mutation.target.id === 'fileInfo') {
+                    addRemoveButtons();
+                }
+            });
+        });
+        
+        // Configurer l'observateur
+        const fileInfo = document.getElementById('fileInfo');
+        if (fileInfo) {
+            observer.observe(fileInfo, { childList: true, subtree: true });
+        }
+        
+        // Remplacer la fonction handleFileSelection pour ajouter notre logique
+        const originalHandleFileSelection = window.handleFileSelection;
+        window.handleFileSelection = function(files) {
+            // Appeler la fonction originale
+            originalHandleFileSelection(files);
+            
+            // Ajouter nos boutons de suppression
+            setTimeout(addRemoveButtons, 0);
+        };
+    });
+</script>
+{% endblock %}
