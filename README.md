@@ -27,8 +27,8 @@ L'application OCR est une application qui permet de reconnaître le texte d'une 
 
 - 🎯 **Fonctionnalité 1** - Reconnaissance de texte d'une image
 - 🔄 **Fonctionnalité 2** - Analyse de l'image et extraction des informations
-- 🛠️ **Fonctionnalité 3** - Affichage des informations en temps réel
-- 📊 **Fonctionnalité 4** - Affichage des informations en temps réel sur une carte
+- 🛠️ **Fonctionnalité 3** - Affichage des informations de factures selon l'utilisateur connecté
+- 📊 **Fonctionnalité 4** - Affichage des informations de monitoring
 
 ## 🚦 Prérequis
 
