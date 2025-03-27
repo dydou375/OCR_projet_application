@@ -47,6 +47,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 localStorage.setItem('userData', JSON.stringify(data.user));
                 console.log("Données utilisateur stockées:", data.user);
                 
+                // Stocker l'email de l'utilisateur
+                localStorage.setItem('userEmail', data.user.email);
+                console.log("Email de l'utilisateur stocké:", data.user.email);
+                
                 // Vérifier si un changement de mot de passe est requis
                 if (data.require_password_change) {
                     // Rediriger vers la page de changement de mot de passe

@@ -67,3 +67,5 @@ Thumbs.db
 # Éviter de mettre le dossier data dans GitHub
 data/
 data/*
+uploads/
+uploads/*
