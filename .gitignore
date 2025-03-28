@@ -69,3 +69,7 @@ data/
 data/*
 uploads/
 uploads/*
+
+# Docker
+.dockerignore
+dockerfile

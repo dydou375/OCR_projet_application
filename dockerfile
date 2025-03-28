@@ -16,6 +16,16 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Étape 3 : Transformer les arguments en variables d'environnement
+ENV DB_HOST="projetocr-psqlflexibleserver.postgres.database.azure.com"
+ENV DB_PORT="5432"
+ENV DB_NAME="postgres"
+ENV DB_USER="psqladmin"
+ENV DB_PASSWORD="GRETAP4!2025***"
+
+ENV VISION_ENDPOINT="https://francecentral.api.cognitive.microsoft.com/"
+ENV VISION_KEY="5b3903aa12104b8c9e036e01c9ef6f80"
+
 # Étape 3 : Mettre à jour pip
 RUN pip install --upgrade pip
 
