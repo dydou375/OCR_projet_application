@@ -1,0 +1,14 @@
+.cache
+.git
+.gitignore
+.vscode
+.env
+
+__pycache__
+
+data/
+data/*
+uploads/
+uploads/*
+
+docs/*

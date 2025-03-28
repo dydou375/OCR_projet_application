@@ -1,37 +1,41 @@
-# Utiliser une image Python officielle comme base
+# Étape 1 : Utiliser une image Python officielle
 FROM python:3.12-slim
 
-# Définir le répertoire de travail
-WORKDIR /app
-
-# Installer les dépendances système nécessaires
+# Étape 2 : Installer Tesseract OCR et ses dépendances système
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
     tesseract-ocr \
     tesseract-ocr-fra \
+    imagemagick \
+    zbar-tools \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     libpq-dev \
     gcc \
+    wget \
+    curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copier les fichiers de dépendances
+# Étape 3 : Mettre à jour pip
+RUN pip install --upgrade pip
+
+# Étape 4 : Définir le répertoire de travail dans le conteneur
+WORKDIR /app
+
+# Étape 5 : Copier d'abord les requirements pour profiter du cache Docker
 COPY requirements.txt .
 
-# Installer les dépendances Python
+# Étape 6 : Installer les dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copier le reste du code de l'application
+# Étape 7 : Copier le reste des fichiers nécessaires dans le conteneur
 COPY . .
 
-# Créer un fichier .env à partir de .env.example
-RUN cp .env.example .env
+# Étape 8 : Créer les répertoires nécessaires et s'assurer qu'ils ont les bonnes permissions
+RUN mkdir -p data uploads && chmod -R 777 data uploads
 
-# Créer les répertoires nécessaires
-RUN mkdir -p data uploads
-
-# Exposer le port sur lequel l'application s'exécute
+# Étape 9 : Exposer le port utilisé par FastAPI
 EXPOSE 8000
 
-# Commande pour démarrer l'application
+# Étape 11 : Commande pour exécuter l'application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
