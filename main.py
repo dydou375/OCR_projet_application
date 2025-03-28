@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Form, UploadFile, File, Response, Depends
+from fastapi import FastAPI, Request, Form, UploadFile, File, Response, Depends, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -22,7 +22,7 @@ import asyncio
 import logging
 import random
 import time
-
+import urllib.parse
 load_dotenv()
 
 try:
@@ -98,6 +98,10 @@ async def index(request: Request):
 @app.get("/historique", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("historique.html", {"request": request})
+
+@app.get("/facture/details/{facture_id}")
+async def facture_details_page(request: Request, facture_id: int):
+    return templates.TemplateResponse("details_facture.html", {"request": request, "facture_id": facture_id})
 
 @app.post("/api/scan-invoice")
 async def scan_invoice(file: UploadFile = File(...), ocr_service: str = "auto"):
@@ -435,266 +439,6 @@ class UserLogin(BaseModel):
     email: str
     password: str
 
-@app.post("/api/login")
-async def login_user(user_data: UserLogin):
-    """
-    Endpoint pour la connexion d'un utilisateur
-    """
-    try:
-        print(f"Tentative de connexion pour l'email: {user_data.email}")
-        
-        # Établir une connexion à la base de données
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Vérifier si l'utilisateur existe dans la table authentification
-        cursor.execute(
-            """
-            SELECT mot_de_passe_hash, salt, email
-            FROM dylan.authentification
-            WHERE LOWER(email) = LOWER(%s)
-            """, 
-            (user_data.email,)
-        )
-        
-        auth_result = cursor.fetchone()
-        print(f"Résultat authentification: {auth_result}")
-        
-        if not auth_result:
-            print(f"Utilisateur {user_data.email} non trouvé dans authentification, création d'un compte temporaire")
-            # Créer un utilisateur temporaire avec le mot de passe par défaut
-            salt = 'temp_salt_123456789'
-            password_hash = '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4'  # hash de '1234'
-            
-            try:
-                # Vérifier si la table authentification existe
-                cursor.execute("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_schema = 'dylan' 
-                        AND table_name = 'authentification'
-                    )
-                """)
-                table_exists = cursor.fetchone()['exists']
-                
-                if not table_exists:
-                    print("La table authentification n'existe pas, création...")
-                    cursor.execute("""
-                        CREATE TABLE IF NOT EXISTS dylan.authentification (
-                            email VARCHAR(255) PRIMARY KEY,
-                            mot_de_passe_hash VARCHAR(255) NOT NULL,
-                            salt VARCHAR(100) NOT NULL,
-                            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            derniere_connexion TIMESTAMP,
-                            est_actif BOOLEAN DEFAULT TRUE
-                        )
-                    """)
-                    conn.commit()
-                
-                # Insérer dans la table authentification
-                cursor.execute(
-                    """
-                    INSERT INTO dylan.authentification (email, mot_de_passe_hash, salt, date_creation, est_actif)
-                    VALUES (%s, %s, %s, %s, TRUE)
-                    """,
-                    (user_data.email, password_hash, salt, datetime.datetime.now())
-                )
-                conn.commit()
-                print(f"Utilisateur temporaire créé dans authentification: {user_data.email}")
-                
-                # Récupérer le nouvel enregistrement
-                cursor.execute(
-                    """
-                    SELECT mot_de_passe_hash, salt, email
-                    FROM dylan.authentification
-                    WHERE LOWER(email) = LOWER(%s)
-                    """, 
-                    (user_data.email,)
-                )
-                auth_result = cursor.fetchone()
-                print(f"Nouvel utilisateur authentification: {auth_result}")
-                
-            except Exception as e:
-                print(f"Erreur lors de la création de l'utilisateur temporaire: {str(e)}")
-                import traceback
-                print(traceback.format_exc())
-                return JSONResponse(
-                    content={"success": False, "message": "Impossible de créer un compte temporaire", "error": str(e)},
-                    status_code=500
-                )
-            
-        # Récupérer les informations de l'utilisateur
-        cursor.execute(
-            """
-            SELECT nom_personne, prenom_personne, email_personne
-            FROM dylan.utilisateur
-            WHERE LOWER(email_personne) = LOWER(%s)
-            """, 
-            (user_data.email,)
-        )
-        
-        user_result = cursor.fetchone()
-        print(f"Résultat utilisateur: {user_result}")
-        
-        # Si l'utilisateur n'existe pas dans la table utilisateur, créer un objet avec des valeurs par défaut
-        if not user_result:
-            try:
-                # Vérifier si la table utilisateur existe
-                cursor.execute("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_schema = 'dylan' 
-                        AND table_name = 'utilisateur'
-                    )
-                """)
-                table_exists = cursor.fetchone()['exists']
-                
-                if not table_exists:
-                    print("La table utilisateur n'existe pas, création...")
-                    cursor.execute("""
-                        CREATE TABLE IF NOT EXISTS dylan.utilisateur (
-                            email_personne VARCHAR(255) PRIMARY KEY,
-                            nom_personne VARCHAR(255),
-                            prenom_personne VARCHAR(255),
-                            date_anniversaire DATE,
-                            adresse VARCHAR(255)
-                        )
-                    """)
-                    conn.commit()
-                
-                # Insérer dans la table utilisateur
-                cursor.execute(
-                    """
-                    INSERT INTO dylan.utilisateur (email_personne, nom_personne, prenom_personne)
-                    VALUES (%s, %s, %s)
-                    """,
-                    (user_data.email, "Utilisateur", "Temporaire")
-                )
-                conn.commit()
-                print(f"Utilisateur temporaire créé dans utilisateur: {user_data.email}")
-                
-                user_result = {
-                    "nom_personne": "Utilisateur",
-                    "prenom_personne": "Temporaire",
-                    "email_personne": user_data.email
-                }
-            except Exception as e:
-                print(f"Erreur lors de la création de l'utilisateur temporaire dans utilisateur: {str(e)}")
-                import traceback
-                print(traceback.format_exc())
-                user_result = {
-                    "nom_personne": "Utilisateur",
-                    "prenom_personne": "Temporaire",
-                    "email_personne": user_data.email
-                }
-        
-        stored_hash = auth_result["mot_de_passe_hash"]
-        salt = auth_result["salt"]
-        
-        print(f"Salt récupéré: {salt}")
-        print(f"Hash stocké: {stored_hash}")
-        
-        # Cas spécial pour le mot de passe temporaire fixe '1234'
-        if salt == 'temp_salt_123456789' and stored_hash == '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4':
-            print("Détection d'un mot de passe temporaire")
-            # Vérifier si le mot de passe fourni est '1234'
-            if user_data.password == '1234':
-                print("Mot de passe temporaire correct")
-                # Connexion réussie avec mot de passe temporaire
-                try:
-                    # Mettre à jour la dernière connexion
-                    cursor.execute(
-                        """
-                        UPDATE dylan.authentification 
-                        SET derniere_connexion = %s 
-                        WHERE email = %s
-                        """, 
-                        (datetime.datetime.now(), user_data.email)
-                    )
-                    conn.commit()
-                except Exception as e:
-                    print(f"Erreur lors de la mise à jour de la dernière connexion: {str(e)}")
-                
-                cursor.close()
-                conn.close()
-                
-                # Retourner les informations avec indication de changement de mot de passe requis
-                return JSONResponse(
-                    content={
-                        "success": True, 
-                        "message": "Connexion réussie avec mot de passe temporaire. Veuillez changer votre mot de passe.",
-                        "require_password_change": True,
-                        "user": {
-                            "email": user_data.email,
-                            "nom": user_result["nom_personne"],
-                            "prenom": user_result["prenom_personne"]
-                        }
-                    }
-                )
-            else:
-                print(f"Mot de passe temporaire incorrect. Attendu: '1234', Reçu: '{user_data.password}'")
-                # Mot de passe incorrect
-                return JSONResponse(
-                    content={"success": False, "message": "Email ou mot de passe incorrect"},
-                    status_code=401
-                )
-        else:
-            print("Vérification du mot de passe standard")
-            # Traitement normal pour les mots de passe non temporaires
-            # Hasher le mot de passe fourni avec le salt stocké
-            input_hash = hashlib.sha256((user_data.password + salt).encode()).hexdigest()
-            print(f"Hash calculé pour le mot de passe fourni: {input_hash}")
-            
-            # Vérifier si les hash correspondent
-            if input_hash != stored_hash:
-                print("Hash ne correspond pas")
-                return JSONResponse(
-                    content={"success": False, "message": "Email ou mot de passe incorrect"},
-                    status_code=401
-                )
-            
-            print("Connexion réussie")
-            # Mettre à jour la dernière connexion
-            cursor.execute(
-                """
-                UPDATE dylan.authentification 
-                SET derniere_connexion = %s 
-                WHERE email = %s
-                """, 
-                (datetime.datetime.now(), user_data.email)
-            )
-            
-            conn.commit()
-            cursor.close()
-            conn.close()
-            
-            # Retourner les informations de l'utilisateur (sans données sensibles)
-            return JSONResponse(
-                content={
-                    "success": True, 
-                    "message": "Connexion réussie",
-                    "user": {
-                        "email": user_data.email,
-                        "nom": user_result["nom_personne"],
-                        "prenom": user_result["prenom_personne"]
-                    }
-                }
-            )
-        
-    except Exception as e:
-        print(f"Erreur lors de la connexion: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
-        if 'conn' in locals() and conn:
-            conn.rollback()
-            cursor.close()
-            conn.close()
-        
-        return JSONResponse(
-            content={"success": False, "error": str(e)}, 
-            status_code=500
-        )
-
 @app.post("/api/register-simple")
 async def register_user_simple(request: Request):
     try:
@@ -710,56 +454,66 @@ async def register_user_simple(request: Request):
 
 # Ajout d'un nouvel endpoint qui correspond à l'URL attendue par le frontend
 @app.post("/auth/jwt/login")
-@PerformanceMonitor.time_function
 async def jwt_login(request: Request):
-    """
-    Endpoint pour la connexion d'un utilisateur (compatible avec l'URL attendue par le frontend)
-    """
     try:
-        # Tenter de récupérer les données de la requête
-        try:
-            if request.headers.get("content-type") and "application/json" in request.headers.get("content-type"):
-                data = await request.json()
-            else:
-                form_data = await request.form()
-                data = dict(form_data)
-        except Exception as data_error:
-            print(f"Erreur lors de la récupération des données: {str(data_error)}")
-            data = {}
+        # Récupérer les données de la requête
+        if request.headers.get("content-type") and "application/json" in request.headers.get("content-type"):
+            data = await request.json()
+        else:
+            form_data = await request.form()
+            data = dict(form_data)
         
-        # Extraire l'email/username des données si disponible
-        email = data.get("username", data.get("email", "utilisateur@example.com"))
-        
-        # Créer un token d'accès fictif (à remplacer par une vraie génération de JWT)
-        access_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
-        
-        # Créer un message de bienvenue statique
-        welcome_message = "Bienvenue, Utilisateur Temporaire ! Nous sommes ravis de vous revoir."
-        
-        # Réponse au format JWT standard avec le message de bienvenue
+        email = data.get("username", data.get("email"))
+        password = data.get("password")
+
+        if not email or not password:
+            raise HTTPException(status_code=400, detail="Email et mot de passe requis")
+
+        # Connexion à la base de données
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Requête pour récupérer les données utilisateur
+        query = """
+        SELECT a.email, a.mot_de_passe, u.nom_personne, u.genre, u.adresse, u.date_anniversaire
+        FROM dylan.authentification a
+        JOIN dylan.utilisateur u ON a.email = u.email_personne
+        WHERE a.email = %s
+        """
+        cursor.execute(query, (email,))
+        user = cursor.fetchone()
+
+        if not user or password != user['mot_de_passe']:
+            raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
+
+        # Créer un token d'accès (à remplacer par une vraie génération de JWT)
+        access_token = "votre_token_jwt"
+
+        # Réponse avec les données utilisateur réelles
         return JSONResponse(
             content={
                 "access_token": access_token,
                 "token_type": "bearer",
                 "user": {
-                    "email": email,
-                    "nom": "Utilisateur",
-                    "prenom": "Temporaire",
-                    "welcome_message": welcome_message,
-                    "is_active": True,
-                    "is_superuser": False,
-                    "is_verified": True
+                    "email": user['email'],
+                    "nom": user['nom_personne'],
+                    "genre": user['genre'],
+                    "adresse": user['adresse'],
+                    "is_active": user.get('est_actif', True),
+                    "is_verified": user.get('is_verified', True)
                 }
             }
         )
     except Exception as e:
         print(f"Erreur dans jwt_login: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
         return JSONResponse(
             content={"success": False, "error": str(e)},
             status_code=500
         )
+    finally:
+        cursor.close()
+        conn.close()
+        
 
 # Ajouter un endpoint pour consulter les métriques
 @app.get("/metrics")
@@ -871,3 +625,82 @@ async def logs_endpoint():
 async def monitoring_dashboard(request: Request):
     """Page de dashboard pour le monitoring"""
     return templates.TemplateResponse("dashboard.html", {"request": request})
+    
+@app.get("/api/factures/{email}")
+async def get_factures(request: Request, email: str):
+    """
+    Endpoint pour récupérer toutes les factures d'un utilisateur
+    """
+    try:
+        # Décoder l'email
+        decoded_email = urllib.parse.unquote(email)
+        # Connexion à la base de données
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Requête pour récupérer les factures de l'utilisateur
+        query = """
+        SELECT f.nom_facture, f.date_facture, f.total_facture, u.nom_personne
+        FROM dylan.facture f
+        JOIN dylan.utilisateur u ON f.email_personne = u.email_personne
+        WHERE u.email_personne = %s
+        """
+        cursor.execute(query, (decoded_email,))
+        factures = cursor.fetchall()
+        
+        for facture in factures:
+            if isinstance(facture['date_facture'], datetime.date):
+                facture['date_facture'] = facture['date_facture'].strftime('%Y-%m-%d')
+
+        return JSONResponse(content={"success": True, "factures": factures})
+    except Exception as e:
+        print(f"Erreur dans get_factures: {str(e)}")
+        return JSONResponse(content={"success": False, "error": str(e)}, status_code=500)
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.get("/api/facture/{facture_id}")
+async def get_facture_details(facture_id: int):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        query = """
+        SELECT f.nom_facture, f.date_facture, f.total_facture, u.nom_personne, a.nom_article, a.quantite, a.prix
+        FROM dylan.facture f
+        JOIN dylan.utilisateur u ON f.email_personne = u.email_personne
+        LEFT JOIN dylan.article a ON f.id = a.facture_id
+        WHERE f.id = %s
+        """
+        cursor.execute(query, (facture_id,))
+        facture_details = cursor.fetchall()
+
+        print("Détails de la facture récupérés:", facture_details)
+
+        for detail in facture_details:
+            if isinstance(detail['date_facture'], datetime.date):
+                detail['date_facture'] = detail['date_facture'].isoformat()
+
+        facture = {
+            "nom_facture": facture_details[0]['nom_facture'],
+            "date_facture": facture_details[0]['date_facture'],
+            "total_facture": facture_details[0]['total_facture'],
+            "nom_personne": facture_details[0]['nom_personne'],
+            "articles": [
+                {
+                    "nom_article": detail['nom_article'],
+                    "quantite": detail['quantite'],
+                    "prix": detail['prix']
+                } for detail in facture_details if detail['nom_article'] is not None
+            ]
+        }
+
+        return JSONResponse(content={"success": True, "facture_details": [facture]})
+    except Exception as e:
+        print(f"Erreur dans get_facture_details: {str(e)}")
+        return JSONResponse(content={"success": False, "error": str(e)}, status_code=500)
+    finally:
+        cursor.close()
+        conn.close()
+        

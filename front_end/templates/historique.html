@@ -28,6 +28,19 @@
                             </thead>
                             <tbody>
                                 <!-- Les données seront injectées ici dynamiquement -->
+                                {% for facture in factures %}
+                                <tr>
+                                    <td>{{ facture.date_facture }}</td>
+                                    <td>{{ facture.nom_facture }}</td>
+                                    <td>{{ facture.nom_personne }}</td>
+                                    <td class="text-end">{{ facture.total_facture }}</td>
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-info" onclick="window.location.href='/facture/details/{{ facture.id }}'">
+                                            <i class="fas fa-eye"></i> Détails
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
                             </tbody>
                         </table>
                     </div>
@@ -38,18 +51,34 @@
 </div>
 
 <!-- Modal pour les détails -->
-<div class="modal fade" id="detailsModal" tabindex="-1">
+<div id="detailsModal" class="modal fade" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Détails de la facture</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <!-- Le contenu sera injecté dynamiquement -->
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <p><strong>N° Facture:</strong> <span id="factureNom"></span></p>
+                        <p><strong>Date:</strong> <span id="factureDate"></span></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Client:</strong> <span id="factureClient"></span></p>
+                        <p><strong>Email:</strong> <span id="factureEmail"></span></p>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <tfoot>
+                            <tr>
+                                <td colspan="3" class="text-end"><strong>Total TTC</strong></td>
+                                <td class="text-end"><strong id="factureTotal"></strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
