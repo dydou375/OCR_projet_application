@@ -2,7 +2,7 @@ from base64 import decode
 from tkinter import Image
 from PIL import Image
 from pyzbar.pyzbar import decode
-from save_data_bdd import update_customer_from_qr
+from back_end.classe.save_data_bdd import update_customer_from_qr
 
 
 def extract_data_qrcode(image_path):
