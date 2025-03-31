@@ -43,7 +43,7 @@ OCR_SERVICES = {
     }
 }
 
-def process_image(image_path):
+def process_image(image_path, scale=2):
     """
     Preprocess an image for OCR to improve text recognition.
     
@@ -54,27 +54,28 @@ def process_image(image_path):
         Processed image as a numpy array
     """
     # Load the image
+    # Redimensionner l'image
     image = cv2.imread(image_path)
     if image is None:
-        raise ValueError(f"Could not load image from {image_path}")
+        return None
+    height, width = image.shape[:2]
+    new_size = (width * scale, height * scale)
+    resized_image = cv2.resize(image, new_size, interpolation=cv2.INTER_CUBIC)
     
-    # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Appliquer un masque sur la photo
+    x_start = int(width * 0.55)
+    y_start = 0
+    x_end = width
+    y_end = int(height * 0.15)
+    cv2.rectangle(resized_image, (x_start, y_start), (x_end, y_end), (255, 255, 255), -1)
     
-    # Apply sharpening filter
-    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-    sharp = cv2.filter2D(gray, -1, kernel)
+    # Convertir en niveaux de gris
+    gray_image = cv2.cvtColor(resized_image, cv2.COLOR_BGR2GRAY)
     
-    # Apply adaptive thresholding
-    thresh = cv2.adaptiveThreshold(
-        sharp, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-        cv2.THRESH_BINARY, 11, 2
-    )
+    # Appliquer le seuillage
+    _, binary_image = cv2.threshold(gray_image, 240, 255, cv2.THRESH_BINARY)
     
-    # Noise removal
-    denoised = cv2.fastNlMeansDenoising(thresh, None, 10, 7, 21)
-    
-    return denoised
+    return binary_image
 
 def extract_text_tesseract(image, config=None):
     """

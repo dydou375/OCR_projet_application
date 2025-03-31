@@ -12,31 +12,38 @@ import json
 from dotenv import load_dotenv
 import hashlib
 import secrets
-from pydantic import BaseModel, EmailStr
-from typing import Optional
-from datetime import date
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 from modeles.user import UserCreate
-from back_end.utils.monitoring import MonitoringMiddleware, PerformanceMonitor, get_metrics
 import asyncio
 import logging
 import random
 import time
 import urllib.parse
+
+from back_end.classe.extract_qr_code import extract_data_qrcode
+from back_end.utils.monitoring import MonitoringMiddleware, PerformanceMonitor, get_metrics
+from back_end.classe.classe_improved.OCR import process_image, extract_invoice_data, get_available_ocr_services
+
+
+
 load_dotenv()
 
-try:
-    from back_end.classe.classe_improved.OCR import process_image, extract_invoice_data, get_available_ocr_services
-except ImportError:
-    # Fonction de secours si l'importation échoue
-    def process_image(file_path):
-        return None
-    def extract_invoice_data(processed_image, image_path=None, ocr_service="auto"):
-        return {"message": "Fonction OCR non disponible - problème d'importation"}
-    def get_available_ocr_services():
-        return []
 
-app = FastAPI()
+
+app = FastAPI(title="Mon API OCR",
+    description="API pour la reconnaissance de texte avec OCR",
+    version="1.0",
+    contact={
+        "name": "Dylan",
+        "url": "https://example.com/contact",
+        "email": "dylan.chevallier@gmail.com",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    },)
 
 app.mount("/front_end/static", StaticFiles(directory="front_end/static"), name="static")
 
@@ -67,43 +74,77 @@ app.add_middleware(
 # Ajouter le middleware de monitoring
 app.add_middleware(MonitoringMiddleware)
 
-@app.get("/", response_class=HTMLResponse)
+# Modèles Pydantic pour les requêtes et réponses
+
+class InvoiceItem(BaseModel):
+    name: str
+    quantity: int
+    unit_price: float
+
+class Invoice(BaseModel):
+    filename: str
+    data: Dict[str, Any] = Field(
+        ...,
+        example={
+            "email": "client@example.com",
+            "client": "Nom du client",
+            "address": "Adresse du client",
+            "invoice_number": "INV-12345",
+            "issue_date": "2023-10-01",
+            "total": 100.0,
+            "items": [
+                {"name": "Article 1", "quantity": 2, "unit_price": 25.0},
+                {"name": "Article 2", "quantity": 1, "unit_price": 50.0}
+            ]
+        }
+    )
+
+class InvoiceResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[Dict[str, Any]] = None
+
+class OCRServiceResponse(BaseModel):
+    success: bool
+    services: List[str]
+
+class UserRegistrationResponse(BaseModel):
+    success: bool
+    message: str
+
+@app.get("/", response_class=HTMLResponse, tags=["Accueil"])
 async def index(request: Request):
     return templates.TemplateResponse("acceuil.html", {"request": request})
 
-@app.get("/login", response_class=HTMLResponse)
+@app.get("/login", response_class=HTMLResponse, tags=["Authentification"])
 async def index(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
-@app.get("/inscription", response_class=HTMLResponse)
+@app.get("/inscription", response_class=HTMLResponse, tags=["Authentification"])
 async def index(request: Request):
     return templates.TemplateResponse("inscription.html", {"request": request})
 
-@app.get("/navbar", response_class=HTMLResponse)
-async def index(request: Request):
-    return templates.TemplateResponse("navbar.html", {"request": request})
-
-@app.get("/logout", response_class=HTMLResponse)
+@app.get("/logout", response_class=HTMLResponse, tags=["Authentification"])
 async def index(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
-@app.get("/d-list", response_class=HTMLResponse)
+@app.get("/d-list", response_class=HTMLResponse, tags=["Accueil"])
 async def index(request: Request):
     return templates.TemplateResponse("d-list.html", {"request": request})
 
-@app.get("/scanner", response_class=HTMLResponse)
+@app.get("/scanner", response_class=HTMLResponse, tags=["Accueil"])
 async def index(request: Request):
     return templates.TemplateResponse("scanner.html", {"request": request})
 
-@app.get("/historique", response_class=HTMLResponse)
+@app.get("/historique", response_class=HTMLResponse, tags=["Accueil"])
 async def index(request: Request):
     return templates.TemplateResponse("historique.html", {"request": request})
 
-@app.get("/facture/details/{facture_id}")
+@app.get("/facture/details/{facture_id}", response_class=HTMLResponse, tags=["Accueil"])
 async def facture_details_page(request: Request, facture_id: int):
     return templates.TemplateResponse("details_facture.html", {"request": request, "facture_id": facture_id})
 
-@app.post("/api/scan-invoice")
+@app.post("/api/scan-invoice", response_model=InvoiceResponse, tags=["Accueil"])
 async def scan_invoice(file: UploadFile = File(...), ocr_service: str = "auto"):
     """
     Endpoint pour analyser une facture téléchargée par l'utilisateur.
@@ -127,6 +168,12 @@ async def scan_invoice(file: UploadFile = File(...), ocr_service: str = "auto"):
         shutil.copyfileobj(file.file, buffer)
     
     try:
+        # Extraire les données du QR code
+        qr_data = extract_data_qrcode(str(file_path))
+        
+        if qr_data:
+            print("Données QR code extraites:", qr_data)
+        
         # Prétraiter l'image
         processed_image = process_image(str(file_path))
         
@@ -143,7 +190,10 @@ async def scan_invoice(file: UploadFile = File(...), ocr_service: str = "auto"):
             ocr_service=ocr_service
         )
         
+        # Fusionner les données du QR code avec les données de la facture
         if invoice_data:
+            if qr_data:
+                invoice_data.update(qr_data)
             return JSONResponse(content={"success": True, "data": invoice_data})
         else:
             return JSONResponse(
@@ -157,10 +207,10 @@ async def scan_invoice(file: UploadFile = File(...), ocr_service: str = "auto"):
         )
     finally:
         # Nettoyer le fichier temporaire si nécessaire
-        # os.remove(file_path)  # Décommentez si vous voulez supprimer le fichier après traitement
+        os.remove(file_path)  # Décommentez si vous voulez supprimer le fichier après traitement
         pass
 
-@app.get("/api/ocr-services")
+@app.get("/api/ocr-services", response_model=OCRServiceResponse, tags=["OCR Analyse"])
 async def get_ocr_services():
     """
     Endpoint pour récupérer la liste des services OCR disponibles.
@@ -177,7 +227,7 @@ async def get_ocr_services():
             status_code=500
         )
 
-@app.post("/api/save-invoices-to-database")
+@app.post("/api/save-invoices-to-database", response_model=InvoiceResponse)
 async def save_invoices_to_database(request: Request):
     """
     Endpoint pour enregistrer plusieurs factures dans la base de données.
@@ -307,7 +357,7 @@ async def save_invoices_to_database(request: Request):
             status_code=500
         )
 
-@app.post("/api/save-invoice-data")
+@app.post("/api/save-invoice-data", tags=["Database"])
 async def save_invoice_data(request: Request):
     """
     Endpoint pour enregistrer les données d'une facture modifiée.
@@ -332,10 +382,16 @@ async def save_invoice_data(request: Request):
             status_code=500
         )
 
-@app.post("/api/register")
+@app.post("/api/register", response_model=UserRegistrationResponse, tags=["Authentification"])
 async def register_user(user_data: UserCreate):
     """
-    Endpoint pour l'inscription d'un nouvel utilisateur
+    Endpoint pour l'inscription d'un nouvel utilisateur.
+    
+    Args:
+        user_data: Données de l'utilisateur à enregistrer
+        
+    Returns:
+        Confirmation de l'inscription
     """
     try:
         # Générer un salt aléatoire
@@ -439,7 +495,7 @@ class UserLogin(BaseModel):
     email: str
     password: str
 
-@app.post("/api/register-simple")
+@app.post("/api/register-simple", tags=["Authentification"])
 async def register_user_simple(request: Request):
     try:
         data = await request.json()
@@ -453,7 +509,7 @@ async def register_user_simple(request: Request):
         )
 
 # Ajout d'un nouvel endpoint qui correspond à l'URL attendue par le frontend
-@app.post("/auth/jwt/login")
+@app.post("/auth/jwt/login", tags=["Authentification"])
 async def jwt_login(request: Request):
     try:
         # Récupérer les données de la requête
@@ -516,7 +572,7 @@ async def jwt_login(request: Request):
         
 
 # Ajouter un endpoint pour consulter les métriques
-@app.get("/metrics")
+@app.get("/metrics", tags=["Monitoring"])
 async def metrics_endpoint():
     """Endpoint pour récupérer les métriques de performance"""
     try:
@@ -565,7 +621,7 @@ async def metrics_endpoint():
         }
 
 # Endpoint pour consulter les logs récents
-@app.get("/logs")
+@app.get("/logs", tags=["Monitoring"])
 async def logs_endpoint():
     """Endpoint pour récupérer les logs récents"""
     try:
@@ -621,12 +677,12 @@ async def logs_endpoint():
         ]}
 
 # Ajouter une route pour le dashboard de monitoring
-@app.get("/monitoring", response_class=HTMLResponse)
+@app.get("/monitoring", response_class=HTMLResponse, tags=["Monitoring"])
 async def monitoring_dashboard(request: Request):
     """Page de dashboard pour le monitoring"""
     return templates.TemplateResponse("dashboard.html", {"request": request})
     
-@app.get("/api/factures/{email}")
+@app.get("/api/factures/{email}", tags=["Details Facture"])
 async def get_factures(request: Request, email: str):
     """
     Endpoint pour récupérer toutes les factures d'un utilisateur
@@ -660,7 +716,7 @@ async def get_factures(request: Request, email: str):
         cursor.close()
         conn.close()
 
-@app.get("/api/facture/{facture_id}")
+@app.get("/api/facture/{facture_id}", tags=["Details Facture"])
 async def get_facture_details(facture_id: int):
     try:
         conn = get_db_connection()
@@ -703,4 +759,5 @@ async def get_facture_details(facture_id: int):
     finally:
         cursor.close()
         conn.close()
+
         
