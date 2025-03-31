@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     gcc \
     wget \
     curl \
+    tk-dev \
+    python3-tk \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
